@@ -1,37 +1,41 @@
 ﻿var Game = function (canvas) {
     //Game Variables
     this.frame = 1;
-    this.frameRate = 100;
+    this.frameRate = 200;
     this.canvas = canvas;
     this.context = this.canvas.getContext("2d");
     this.lastUpdate = 0;
     this.gameObjects = [];
+    this.cameraCoordinates = new Vector(0, 0);
+    this.gameState = "Playing";
 
+    //BlackHole
+    this.blackHole = new BlackHole(new Vector(canvas.width / 2, canvas.height / 2), new Vector(0, 0), 1000);
+    this.gameObjects.push(this.blackHole);
     
     //SpaceShip
-    this.spaceShip = new SpaceShip(new Vector(canvas.width / 2 - 100, canvas.height / 2), new Vector(0, 0), 10);
+    this.spaceShip = new SpaceShip(new Vector(this.blackHole.position.x + this.blackHole.radius + 30, this.blackHole.position.y), new Vector(0, 0), 10);
     this.gameObjects.push(this.spaceShip);
     this.spaceShip.angle = Math.PI;
     this.spaceShip.angularVelocity = 0;
     this.spaceShip.rotationalPoint = new Vector(canvas.width / 2, canvas.height / 2);
 
-    //BlackHole
-    this.blackHole = new BlackHole(new Vector(canvas.width / 2, canvas.height / 2), new Vector(0, 0), 50);
-    this.gameObjects.push(this.blackHole);
-
     //Asteroids
     this.lastAsteroidSpawn = 0;
-    this.asteroidSpawnRate = .8;
-    this.asteroidSpeed = .2;
+    this.asteroidSpawnRate = 20;
+    this.asteroidSpeed = 200;
 
 }
-
 Game.prototype.run = function () {
-    this.update();
-    this.clear();
-    this.draw();
+    if (this.gameState = "Playing") {
+        this.update();
+        this.clear();
+        this.draw();
+    }
+    else if (this.gameState = "GameOver") {
+        this.gameOver();
+    }
 }
-
 Game.prototype.update = function () {
     console.log(this.frame);
     var startTime = new Date().getTime();
@@ -43,7 +47,8 @@ Game.prototype.update = function () {
     }
     else {
         //Calculate DeltaTime
-        var deltaTime = startTime - this.lastUpdate;
+        //deltaTime is in Seconds
+        var deltaTime = (startTime - this.lastUpdate) / 1000; 
 
         //Update Last Update Time
         this.lastUpdate = startTime;
@@ -55,7 +60,8 @@ Game.prototype.update = function () {
 
         //Determine Asteroid Spawn
         var spawnAsteroid = false;
-        if ((startTime - this.lastAsteroidSpawn) >= (this.asteroidSpawnRate * 1000)) {
+        var deltaSpawnTime = (startTime - this.lastAsteroidSpawn) / 1000;
+        if (this.asteroidSpawnRate != 0 && 1 / this.asteroidSpawnRate < deltaSpawnTime) {
             spawnAsteroid = true;
             this.lastAsteroidSpawn = startTime;
             //console.log("Asteroid Spawned");
@@ -67,14 +73,13 @@ Game.prototype.update = function () {
         }
 
         //Collision
-        var self = this;
         var newGameObjects = [];
         newGameObjects.push(this.spaceShip);
         newGameObjects.push(this.blackHole);
         this.gameObjects.forEach(function (aGameObject,index) {
             //Skip is object is spaceship or blackhole
             if (aGameObject == this.spaceShip || aGameObject == this.blackHole) {
-                console.log("skipped");
+                //console.log("skipped");
                 return;
             }
 
@@ -83,6 +88,8 @@ Game.prototype.update = function () {
             //Compare collision with blackhole and spaceship
             if (this.collision(this.gameObjects.indexOf(this.spaceShip), index)) {
                 alert("Game Over");
+                this.constructor(this.canvas);
+                return;
             }
             if (this.collision(this.gameObjects.indexOf(this.blackHole), index)) {
                 console.log("Asteroid Destroyed");
@@ -94,27 +101,44 @@ Game.prototype.update = function () {
         this.gameObjects = newGameObjects;
     }
 }
-
 Game.prototype.clear = function () {
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 }
-
 Game.prototype.draw = function () {
+
+    //Draw Background
     var context = this.context;
     context.fillStyle = "#191970";
     context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    this.gameObjects.forEach(function (aGameObject) { aGameObject.draw(context) })
-}
 
+    //Move Camera Center Spaceship
+    this.context.save();
+    
+    this.context.translate(this.canvas.width / 2, this.canvas.height / 2);
+    this.context.rotate(Math.PI / 2 - this.spaceShip.angle + Math.PI);
+    this.context.translate(-this.canvas.width / 2, -this.canvas.height / 2);
+    this.context.translate(-this.spaceShip.position.x, -this.spaceShip.position.y);
+    this.context.translate(this.canvas.width / 2, this.canvas.height / 2);
+
+    //Draw Objects
+    this.gameObjects.forEach(function (aGameObject) { aGameObject.draw(context) })
+
+
+    this.context.restore();
+
+
+}
 Game.prototype.move = function (direction) {
+
+    var shipSpeed = .1 * 2 * Math.PI;
+
     if (direction > 0) {
-        this.spaceShip.angularVelocity = 2 * Math.PI / 2000;
+        this.spaceShip.angularVelocity = shipSpeed;
     }
     else {
-        this.spaceShip.angularVelocity = -2 * Math.PI / 2000;
+        this.spaceShip.angularVelocity =  -1 * shipSpeed;
     }
 }
-
 Game.prototype.spawnAsteroid = function (speed) {
 
     console.log("Asteroid Created");
@@ -133,31 +157,37 @@ Game.prototype.spawnAsteroid = function (speed) {
         //Return Value
         return v;
     }
-    var asteroidPosition;
+    var asteroidAngle = Math.floor((Math.random() * 360)) * Math.PI / 180;
+    var asteroidSpawnDistance = this.blackHole.radius + Math.max(this.canvas.width, this.canvas.height);
+    var asteroidPosition = new Vector(asteroidSpawnDistance * Math.cos(asteroidAngle) + this.blackHole.position.x,
+        asteroidSpawnDistance * Math.sin(asteroidAngle) + this.blackHole.position.y);
 
-    //Calculate Asteroid Spawn Position
-    if (side == 1) {    
-        asteroidPosition = new Vector(Math.floor(Math.random() * this.canvas.width), this.canvas.height);
-    }
-    else if (side == 2) {
-        asteroidPosition = new Vector(this.canvas.width, Math.floor(Math.random() * this.canvas.height));
-    }
-    else if (side == 3) {
-        asteroidPosition = new Vector(Math.floor(Math.random() * this.canvas.width), 0);
-    }
-    else {
-        asteroidPosition = new Vector(0, Math.floor(Math.random() * this.canvas.height));
-    }
-
-    //Calculate Asteroid Velcoity
-    var oppositePosition = new Vector(this.canvas.width - asteroidPosition.x, this.canvas.height - asteroidPosition.y);
-    var asteroidVelocity = calculateVelocity(asteroidPosition, oppositePosition);
+    //Calculate Asteroid Velcoity;
+    var asteroidVelocity = calculateVelocity(asteroidPosition, this.blackHole.position);
 
     //Place Asteroid
     var asteroid = new Asteroid(asteroidPosition, asteroidVelocity, 30);
     this.gameObjects.push(asteroid);
-}
 
+    //Make Sure Asteroid Are Not Colliding or Respawn
+    var asteroidsColliding = false;
+    this.gameObjects.forEach(function (aGameObject, index) {
+        //Skip is object is spaceship or blackhole or recently added asteroid
+        if (aGameObject == this.spaceShip || aGameObject == this.blackHole || aGameObject == asteroid) {
+            return;
+        }
+
+        if (this.collision(index, this.gameObjects.length - 1)) {
+            asteroidsColliding = true;
+        }
+
+    }, this);
+    if (asteroidsColliding) {
+        this.gameObjects.pop();
+        this.spawnAsteroid(speed);
+    }
+
+}
 Game.prototype.collision = function (index1, index2) {
 
     var gameObject1 = this.gameObjects[index1];
@@ -181,32 +211,37 @@ Game.prototype.collision = function (index1, index2) {
    
     
 }
+Game.prototype.adjustCamera = function () {
+
+    this.context.save();
+    this.context.scale(1.5, 1.5);
+    this.context.restore();
+}
+Game.prototype.gameOver = function () {
+    alert("Game Over");
+    this.constructor();
+    this.gameState = "Playing";
+}
 
 var Vector = function (x,y) {
     this.x = x;
     this.y = y;
 }
-
 Vector.prototype.normalize = function () {
     var norm = Math.sqrt(Math.pow(this.x,2) + Math.pow(this.y,2))
     this.x = this.x / norm;
     this.y = this.y / norm;
 }
 
-var inheritsFrom = function (child, parent) {
-    child.prototype = Object.create(parent.prototype);
-}
-
 var GameObject = function (position, velocity, radius) {
     this.position = position;
     this.velocity = velocity;
     this.radius = radius;
+    this.image;
 }
-
 GameObject.prototype.update = function (deltaTime) {
 
 }
-
 GameObject.prototype.draw = function (context) {
     context.beginPath();
     context.arc(this.position.x, this.position.y, this.radius, 0, 2 * Math.PI);
@@ -221,12 +256,10 @@ var SpaceShip = function (position,velocity,radius) {
     GameObject.call(this, position, velocity, radius);
 
     this.angle = Math.PI;
-    this.angularVelocity = 0;
+    this.angularVelocity = velocity.x / (Math.PI * 2);
     this.rotationalPoint = new Vector(0, 0);
 }
-
 SpaceShip.prototype = Object.create(GameObject.prototype);
-
 SpaceShip.prototype.update = function (deltaTime) {
 
     //Calculate Radius
@@ -243,9 +276,7 @@ SpaceShip.prototype.update = function (deltaTime) {
     this.position.x = radius * Math.cos(this.angle) + (this.rotationalPoint.x);
     this.position.y = radius * Math.sin(this.angle) + (this.rotationalPoint.y);
     //console.log("Space ship position: (%f,%f)", this.spaceShip.position.x,this.spaceShip.y);
-
 }
-
 SpaceShip.prototype.draw = function (context) {
     context.beginPath();
     context.arc(this.position.x, this.position.y, this.radius, 0, 2 * Math.PI);
@@ -255,33 +286,40 @@ SpaceShip.prototype.draw = function (context) {
     context.closePath();
 }
 
-
 var BlackHole = function (position, velocity, radius) {
     GameObject.call(this, position, velocity, radius);
 }
-
 BlackHole.prototype = Object.create(GameObject.prototype);
 
 var Asteroid = function (position, velocity, radius) {
     GameObject.call(this, position, velocity, radius);
+    this.image = new Image();
+    this.image.src = "/Images/asteroid.png";
 }
-
 Asteroid.prototype = Object.create(GameObject.prototype);
-
 Asteroid.prototype.update = function (deltaTime) {
     //Update Asteroid Position
     this.position.x = this.velocity.x * deltaTime + this.position.x;
     this.position.y = this.velocity.y * deltaTime + this.position.y;
     
 }
-
 Asteroid.prototype.draw = function (context) {
+
+    context.drawImage(this.image, this.position.x - this.radius, this.position.y - this.radius);
+
+    context.save();
+    context.globalAlpha = .5;
     context.beginPath();
     context.arc(this.position.x, this.position.y, this.radius, 0, 2 * Math.PI);
     context.fillStyle = 'brown';
     context.fill();
     context.stroke();
     context.closePath();
+    context.restore();
+ 
+}
+Asteroid.prototype.fracture = function (fracturePoint) {
+    
 }
 
 function main() {
@@ -298,5 +336,4 @@ function main() {
 
     window.setInterval(myGame.run.bind(myGame), 1000 / myGame.frameRate);
 }
-
 main();
